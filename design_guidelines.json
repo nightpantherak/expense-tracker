@@ -1,0 +1,131 @@
+{
+  "app_name": "NSIAP Expense Tracker",
+  "brand": "NSIAP Enterprises",
+  "theme_mode": "dark",
+  "archetype": "Archetype 5: Jewel & Luxury (adapted for futuristic UI)",
+  "core_design_principles": [
+    "Glass OS Style: Heavily rely on 'expo-blur' for frosted glass effects layered over deep atmospheric dark backgrounds.",
+    "Neon Illumination: Use electric blue, soft purple, and neon cyan sparingly as glowing accents, not dominant blocks of color.",
+    "Tactile Depth: Surfaces should have subtle 1px inner borders to simulate glass edge reflections.",
+    "Clean Typography: Use structured, premium sans-serifs. Ditch Inter for headings; use Outfit for a modern, geometric feel."
+  ],
+  "colors": {
+    "background": "#07070A",
+    "background_gradient": ["#07070A", "#0C0C14", "#050508"],
+    "glass_surface": "rgba(255, 255, 255, 0.04)",
+    "glass_border": "rgba(255, 255, 255, 0.08)",
+    "primary": "#3B82F6",
+    "secondary": "#8B5CF6",
+    "highlight": "#22D3EE",
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A1A1AA",
+      "tertiary": "#71717A"
+    },
+    "status": {
+      "income": "#34C759",
+      "expense": "#FF3B30",
+      "warning": "#FF9500"
+    },
+    "glow_shadows": {
+      "primary": "rgba(59, 130, 246, 0.5)",
+      "highlight": "rgba(34, 211, 238, 0.6)"
+    }
+  },
+  "typography": {
+    "libraries": ["@expo-google-fonts/outfit", "@expo-google-fonts/manrope"],
+    "headings": {
+      "family": "Outfit",
+      "h1": "text-4xl md:text-5xl font-black tracking-tighter",
+      "h2": "text-3xl font-bold tracking-tight",
+      "h3": "text-2xl font-semibold tracking-tight"
+    },
+    "body": {
+      "family": "Manrope",
+      "large": "text-lg font-medium leading-relaxed",
+      "base": "text-base font-normal leading-relaxed",
+      "small": "text-sm font-medium text-gray-400"
+    },
+    "numbers": {
+      "family": "Outfit",
+      "balance": "text-5xl font-black tracking-tighter text-white",
+      "currency": "text-2xl font-bold text-highlight"
+    }
+  },
+  "spacing_and_layout": {
+    "screen_padding": "p-6",
+    "glass_card_padding": "p-6",
+    "list_gap": "gap-4",
+    "border_radius": {
+      "card": "rounded-3xl",
+      "button": "rounded-2xl",
+      "badge": "rounded-full"
+    }
+  },
+  "components": {
+    "GlassCard": {
+      "tech": "expo-blur (BlurView)",
+      "props": "tint='dark' intensity={60}",
+      "style": "bg-white/5 border border-white/10 rounded-3xl overflow-hidden",
+      "usage": "Dashboard summary, Analytics charts, Tips cards."
+    },
+    "FloatingActionButton": {
+      "style": "absolute bottom-6 right-6 w-16 h-16 rounded-full bg-primary items-center justify-center shadow-[0_0_30px_rgba(59,130,246,0.5)]",
+      "icon": "Plus (white, 24px)"
+    },
+    "BottomTabBar": {
+      "tech": "expo-blur (BlurView)",
+      "style": "absolute bottom-0 w-full h-24 border-t border-white/10 bg-transparent",
+      "tab_icons": "Active: highlight (#22D3EE) + glow, Inactive: text-secondary (#A1A1AA)"
+    },
+    "TransactionItem": {
+      "style": "flex-row items-center justify-between p-4 bg-white/5 rounded-2xl mb-3 border border-white/5",
+      "left": "Category Icon in a rounded-xl container with a subtle tint of the category color",
+      "right": "Amount (Green for Income, Red for Expense) + Date"
+    }
+  },
+  "screens": {
+    "Splash": {
+      "layout": "Centered logo and text over deep background gradient.",
+      "animations": "Fade in + slight scale up. App Name 'NSIAP Expense Tracker' followed by delayed fade-in of subtitle 'by NSIAP Enterprises'."
+    },
+    "Onboarding": {
+      "layout": "Carousel (3-4 screens). Each screen has a glowing abstract illustration, a bold H2, and a brief description.",
+      "controls": "Glassmorphic 'Next' button or Swipe to continue."
+    },
+    "Auth": {
+      "layout": "Glass card containing inputs over a subtly glowing background (purple/blue soft radial gradients behind the card).",
+      "inputs": "bg-black/40 border border-white/10 rounded-xl p-4 text-white placeholder-gray-500."
+    },
+    "Dashboard": {
+      "hero": "Total Balance Glass Card (spanning full width). Shows balance with neon cyan glow.",
+      "sections": "Recent Transactions list, Monthly Summary mini-chart."
+    },
+    "Analytics": {
+      "charts": "React Native SVG Charts or Victory Native. Pie chart with segments in primary, secondary, highlight. Bar chart for weekly trends."
+    },
+    "AddTransaction": {
+      "layout": "Modal (Sheet) sliding up from bottom. Glassmorphic background.",
+      "fields": "Segmented control (Income/Expense), Amount Input (massive text size), Category Grid, Date Picker, Note."
+    }
+  },
+  "icons": {
+    "library": "lucide-react-native",
+    "stroke_width": 1.5,
+    "strategy": "Minimalist, line-based icons. Do not use filled icons unless representing an active state."
+  },
+  "animations": {
+    "library": "react-native-reanimated",
+    "transitions": "Keep them fast (200-300ms). Heavy animations feel cheap in utility apps. Smooth page transitions via expo-router.",
+    "interactions": "Buttons should slightly scale down (0.95) on press."
+  },
+  "testing": {
+    "data_testid_convention": "All interactive elements MUST include testID (React Native) or data-testid (Web).",
+    "examples": [
+      "testID='login-submit-button'",
+      "testID='add-transaction-fab'",
+      "testID='transaction-amount-input'"
+    ]
+  },
+  "instructions_to_main_agent": "Ensure you are using Expo SDK 50+ and expo-router. Use `expo-blur` for all glassmorphic components to guarantee native performance. Create pure `.js` files as requested. Wrap all text in a custom <Text> component that sets the default font family to Manrope. For radial glowing background effects, use `expo-linear-gradient` or React Native SVG radial gradients positioned absolutely behind the main content. Apply rigorous testIDs to all touchables."
+}
