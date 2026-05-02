@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 2 testing complete. Backend: 17/17 pytest tests pass (savings GET/POST with goal/saved/remaining/percent/days_left/message/status; forgot-password returns reset_token for known emails and 200-ok without leaking token for unknown; reset-password rejects invalid/used tokens, succeeds with valid, single-use enforced, new password works for login; change-password rejects wrong current, accepts correct and new password logs in; analytics summary for period=today|week|month returns expected shape with top_category + budget{amount,spent,remaining}; regression: categories/budget/transactions still OK). Fixed 1 backend bug during review (RCA below). Frontend (390x844 mobile): signup→dashboard; period-today/period-week/period-month toggles switch metrics; dashboard-remaining mini card populates; dashboard-top-cat hidden correctly when no expenses (top_category=null); 'Set a savings goal' CTA opens modal (goal-amount-input, save-goal-button) → saved goal renders animated progress bar with status message (observed: ₹0 of ₹5,000, 'Behind target — save ~₹172/day'); Login shows 'Welcome back / Sign in to NSIAP Expense Tracker' branding; forgot-password-link → forgot screen → submit → success state with 'Continue' button; reset token confirmed NOT displayed in UI; Continue navigates to reset-password screen with token pre-filled via route params (32 chars); reset→'Sign in'→login works with new password; change-password screen testIDs render correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Animations (web)", "issue": "useNativeDriver unsupported on web — harmless fallback warning."},
+      {"component": "Styles", "issue": "Existing 'shadow*'/'textShadow*' deprecation warnings persist (carried from iter 1)."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter2_features.py",
+    "/app/backend/tests/test_nsiap_api.py",
+    "/app/test_reports/pytest/iter2_results.xml"
+  ],
+  "action_items": [
+    "None blocking. Optional: clean up deprecated RN Web style props (shadow*/textShadow*)."
+  ],
+  "critical_code_review_comments": [
+    "get_savings percent can be >100 once saved>=goal; UI should clamp AnimatedProgress width to 100% (verify component behavior for values >100).",
+    "reset-password now handles tz-naive expires_at from Mongo; consider also normalizing created_at reads anywhere else if compared to tz-aware datetimes.",
+    "forgot-password returns reset_token in API response — acceptable for MVP (documented as such), but make sure production flow moves to email delivery before launch.",
+    "No rate-limit on /auth/forgot-password and /auth/login — brute-force exposure. Consider IP throttle or lockout before launch.",
+    "Password reset tokens have no TTL index in MongoDB — stale tokens accumulate; add expireAfterSeconds index on expires_at."
+  ],
+  "updated_files": [
+    "/app/backend/server.py",
+    "/app/backend/tests/test_iter2_features.py",
+    "/app/test_reports/iteration_2.json"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Per-run throwaway users via /api/auth/register (uuid-suffixed emails). No static seed required.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run both suites: `pytest /app/backend/tests/ -v`. All 35 tests (18 iter1 + 17 iter2) should pass. Frontend critical testIDs verified this round: period-today/week/month, dashboard-remaining, dashboard-top-cat (hidden when no expense, shown when >=1), add-savings-goal-cta → goal-amount-input + save-goal-button → savings-saved, forgot-password-link, forgot-email-input, forgot-submit-button, continue-reset, reset-token-input (pre-filled from route params, NEVER shown to user as plain text anywhere else), reset-password-input, reset-submit-button, reset-go-login, profile-change-password, current-password-input, new-password-input, change-password-submit. Backend public URL: https://smooth-spend.preview.emergentagent.com.",
+  "rca_of_issue": "BUG (fixed this iteration): POST /api/auth/reset-password returned 500 Internal Server Error for any valid token. Root cause: MongoDB strips tzinfo from datetimes on read, so `rec['expires_at']` came back as a tz-NAIVE datetime and was compared to `datetime.now(timezone.utc)` (tz-AWARE), raising `TypeError: can't compare offset-naive and offset-aware datetimes`. Reproduction: call /auth/forgot-password to get a token, then POST /auth/reset-password with that token — 500. Fix applied in /app/backend/server.py reset_password(): read expires_at and, if naive, replace tzinfo with timezone.utc before comparison. Re-ran tests → all 17 iter2 tests pass."
+}

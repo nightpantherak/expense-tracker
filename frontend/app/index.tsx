@@ -58,7 +58,7 @@ export default function Splash() {
         <View style={styles.logoBadge}>
           <Text style={styles.logoN}>N</Text>
         </View>
-        <Text style={styles.title}>NSIAP Expense Tracker</Text>
+        <Text style={styles.title}>Expense Tracker</Text>
       </Animated.View>
       <Animated.Text style={[styles.subtitle, { opacity: subFade }]}>by NSIAP Enterprises</Animated.Text>
     </View>

@@ -38,6 +38,8 @@ export default function Profile() {
           <Row icon="chart" label="Analytics" onPress={() => router.push('/(tabs)/analytics')} testID="profile-analytics" />
           <Divider />
           <Row icon="piggy-bank" label="Budget" onPress={() => router.push('/(tabs)/budget')} testID="profile-budget" />
+          <Divider />
+          <Row icon="tag" label="Change password" onPress={() => router.push('/change-password')} testID="profile-change-password" />
         </GlassCard>
 
         <TouchableOpacity testID="logout-button" style={styles.logout} onPress={onLogout} activeOpacity={0.8}>

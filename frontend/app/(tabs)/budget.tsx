@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import GlassCard from '../../src/GlassCard';
 import Icon from '../../src/Icon';
+import AnimatedProgress from '../../src/AnimatedProgress';
 import { theme, fmtMoney } from '../../src/theme';
 import { api } from '../../src/api';
 
@@ -71,11 +72,11 @@ export default function Budget() {
             <Text style={styles.label}>Spent this month</Text>
             <Text style={styles.amountLg}>{fmtMoney(b?.spent || 0)}</Text>
           </View>
-          <View style={styles.barBg}>
-            <LinearGradient
+          <View style={{ marginTop: 14 }}>
+            <AnimatedProgress
+              percent={percent}
+              height={12}
               colors={overBudget ? [theme.expense, '#FF6B00'] : near ? [theme.warning, theme.expense] : [theme.highlight, theme.primary]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={[styles.barFill, { width: `${percent}%` }]}
             />
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>

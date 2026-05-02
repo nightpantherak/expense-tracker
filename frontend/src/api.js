@@ -46,7 +46,17 @@ export const api = {
   getBudget: (month) => request(`/budget${month ? `?month=${month}` : ''}`),
   setBudget: (body) => request('/budget', { method: 'POST', body }),
 
-  analytics: (month) => request(`/analytics/summary${month ? `?month=${month}` : ''}`),
+  getSavings: (month) => request(`/savings${month ? `?month=${month}` : ''}`),
+  setSavings: (body) => request('/savings', { method: 'POST', body }),
+
+  analytics: (params = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request(`/analytics/summary${q ? `?${q}` : ''}`);
+  },
+
+  forgotPassword: (email) => request('/auth/forgot-password', { method: 'POST', body: { email } }),
+  resetPassword: (body) => request('/auth/reset-password', { method: 'POST', body }),
+  changePassword: (body) => request('/auth/change-password', { method: 'POST', body }),
 };
 
 export async function setToken(token) {

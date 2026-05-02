@@ -109,6 +109,21 @@ class BudgetSet(BaseModel):
     amount: float
     month: Optional[str] = None  # YYYY-MM
 
+class SavingsSet(BaseModel):
+    amount: float
+    month: Optional[str] = None
+
+class ForgotPasswordReq(BaseModel):
+    email: EmailStr
+
+class ResetPasswordReq(BaseModel):
+    token: str
+    password: str = Field(min_length=6)
+
+class ChangePasswordReq(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=6)
+
 
 DEFAULT_CATEGORIES = [
     {"name": "Food",          "icon": "utensils",   "color": "#FF6B6B", "type": "expense", "is_default": True},
@@ -169,6 +184,120 @@ async def me(user=Depends(get_current_user)):
 @api_router.post("/auth/logout")
 async def logout(user=Depends(get_current_user)):
     return {"ok": True}
+
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(payload: ForgotPasswordReq):
+    import secrets
+    email = payload.email.lower().strip()
+    user = await db.users.find_one({"email": email})
+    # Always return ok to avoid email enumeration
+    if not user:
+        return {"ok": True, "message": "If the email exists, a reset token was issued"}
+    token = secrets.token_urlsafe(24)
+    await db.password_reset_tokens.insert_one({
+        "token": token,
+        "user_id": str(user["_id"]),
+        "created_at": datetime.now(timezone.utc),
+        "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+        "used": False,
+    })
+    # For this MVP (no email provider), return the token so the client can use it
+    return {"ok": True, "reset_token": token, "message": "Use this token to reset your password"}
+
+
+@api_router.post("/auth/reset-password")
+async def reset_password(payload: ResetPasswordReq):
+    rec = await db.password_reset_tokens.find_one({"token": payload.token, "used": False})
+    if not rec:
+        raise HTTPException(status_code=400, detail="Invalid or used token")
+    expires_at = rec["expires_at"]
+    # Mongo strips tzinfo; treat stored datetime as UTC
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Token expired")
+    await db.users.update_one({"_id": ObjectId(rec["user_id"])}, {"$set": {"password_hash": hash_password(payload.password)}})
+    await db.password_reset_tokens.update_one({"_id": rec["_id"]}, {"$set": {"used": True}})
+    return {"ok": True}
+
+
+@api_router.post("/auth/change-password")
+async def change_password(payload: ChangePasswordReq, user=Depends(get_current_user)):
+    doc = await db.users.find_one({"_id": ObjectId(user["id"])})
+    if not verify_password(payload.current_password, doc["password_hash"]):
+        raise HTTPException(status_code=400, detail="Current password incorrect")
+    await db.users.update_one({"_id": doc["_id"]}, {"$set": {"password_hash": hash_password(payload.new_password)}})
+    return {"ok": True}
+
+
+# ---------------- Savings Goal ----------------
+@api_router.get("/savings")
+async def get_savings(user=Depends(get_current_user), month: Optional[str] = None):
+    m = month or current_month()
+    s = await db.savings.find_one({"user_id": user["id"], "month": m})
+    goal = s["amount"] if s else 0.0
+    year, mo = m.split("-")
+    start = datetime(int(year), int(mo), 1, tzinfo=timezone.utc)
+    if int(mo) == 12:
+        end = datetime(int(year) + 1, 1, 1, tzinfo=timezone.utc)
+    else:
+        end = datetime(int(year), int(mo) + 1, 1, tzinfo=timezone.utc)
+
+    async def sum_type(t):
+        agg = db.transactions.aggregate([
+            {"$match": {"user_id": user["id"], "type": t, "date": {"$gte": start, "$lt": end}}},
+            {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+        ])
+        total = 0.0
+        async for row in agg:
+            total = row["total"]
+        return total
+
+    income = await sum_type("income")
+    expense = await sum_type("expense")
+    saved = max(0.0, income - expense)
+    percent = (saved / goal * 100) if goal > 0 else 0
+
+    # days left in month
+    now = datetime.now(timezone.utc)
+    days_left = (end - now).days
+    remaining = max(0.0, goal - saved)
+
+    message = ""
+    status = "neutral"
+    if goal > 0:
+        if saved >= goal:
+            message = "Goal achieved! Great work."
+            status = "achieved"
+        else:
+            day_of_month = now.day
+            days_in_month = (end - start).days
+            expected = goal * (day_of_month / days_in_month)
+            if saved >= expected:
+                message = f"On track — keep it up"
+                status = "on_track"
+            else:
+                per_day = remaining / max(1, days_left)
+                message = f"Behind target — save ~₹{per_day:.0f}/day"
+                status = "behind"
+
+    return {
+        "month": m, "goal": goal, "saved": saved, "remaining": remaining,
+        "percent": percent, "days_left": max(0, days_left),
+        "message": message, "status": status,
+    }
+
+
+@api_router.post("/savings")
+async def set_savings(payload: SavingsSet, user=Depends(get_current_user)):
+    m = payload.month or current_month()
+    await db.savings.update_one(
+        {"user_id": user["id"], "month": m},
+        {"$set": {"amount": float(payload.amount), "updated_at": datetime.now(timezone.utc)}},
+        upsert=True,
+    )
+    return await get_savings(user=user, month=m)
 
 
 # ---------------- Categories ----------------
@@ -348,14 +477,22 @@ async def set_budget(payload: BudgetSet, user=Depends(get_current_user)):
 
 # ---------------- Analytics ----------------
 @api_router.get("/analytics/summary")
-async def analytics_summary(user=Depends(get_current_user), month: Optional[str] = None):
+async def analytics_summary(user=Depends(get_current_user), month: Optional[str] = None, period: Optional[str] = "month"):
     m = month or current_month()
     year, mo = m.split("-")
-    start = datetime(int(year), int(mo), 1, tzinfo=timezone.utc)
-    if int(mo) == 12:
-        end = datetime(int(year) + 1, 1, 1, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    if period == "today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=1)
+    elif period == "week":
+        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        end = start + timedelta(days=7)
     else:
-        end = datetime(int(year), int(mo) + 1, 1, tzinfo=timezone.utc)
+        start = datetime(int(year), int(mo), 1, tzinfo=timezone.utc)
+        if int(mo) == 12:
+            end = datetime(int(year) + 1, 1, 1, tzinfo=timezone.utc)
+        else:
+            end = datetime(int(year), int(mo) + 1, 1, tzinfo=timezone.utc)
 
     # Total income / expense over all time & this month
     async def sum_type(t: str, date_range=None):
@@ -376,7 +513,7 @@ async def analytics_summary(user=Depends(get_current_user), month: Optional[str]
     month_income = await sum_type("income", {"$gte": start, "$lt": end})
     month_expense = await sum_type("expense", {"$gte": start, "$lt": end})
 
-    # Pie chart: expense by category this month
+    # Pie chart: expense by category in selected period
     pie_cursor = db.transactions.aggregate([
         {"$match": {"user_id": user["id"], "type": "expense", "date": {"$gte": start, "$lt": end}}},
         {"$group": {"_id": "$category", "total": {"$sum": "$amount"}}},
@@ -385,6 +522,25 @@ async def analytics_summary(user=Depends(get_current_user), month: Optional[str]
     pie = []
     async for row in pie_cursor:
         pie.append({"category": row["_id"], "total": row["total"]})
+
+    top_category = pie[0]["category"] if pie else None
+    top_category_amount = pie[0]["total"] if pie else 0.0
+
+    # Budget for current month (used for "remaining" widget)
+    bm = current_month()
+    bdoc = await db.budgets.find_one({"user_id": user["id"], "month": bm})
+    budget_amount = bdoc["amount"] if bdoc else 0.0
+    bm_y, bm_mo = bm.split("-")
+    b_start = datetime(int(bm_y), int(bm_mo), 1, tzinfo=timezone.utc)
+    b_end = datetime(int(bm_y) + 1, 1, 1, tzinfo=timezone.utc) if int(bm_mo) == 12 else datetime(int(bm_y), int(bm_mo) + 1, 1, tzinfo=timezone.utc)
+    bagg = db.transactions.aggregate([
+        {"$match": {"user_id": user["id"], "type": "expense", "date": {"$gte": b_start, "$lt": b_end}}},
+        {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
+    ])
+    budget_spent = 0.0
+    async for row in bagg:
+        budget_spent = row["total"]
+    budget_remaining = max(0.0, budget_amount - budget_spent)
 
     # Bar chart: last 7 days expenses
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -405,7 +561,7 @@ async def analytics_summary(user=Depends(get_current_user), month: Optional[str]
     insights = []
     if pie:
         top = pie[0]
-        insights.append({"icon": "trending-up", "title": f"You spent most on {top['category']}", "detail": f"₹{top['total']:.0f} this month"})
+        insights.append({"icon": "trending-up", "title": f"You spent most on {top['category']}", "detail": f"₹{top['total']:.0f} in this period"})
     if month_expense > 0 and month_income > 0:
         ratio = month_expense / month_income
         if ratio > 0.8:
@@ -413,12 +569,20 @@ async def analytics_summary(user=Depends(get_current_user), month: Optional[str]
         elif ratio < 0.5:
             insights.append({"icon": "smile", "title": "Great saving pace", "detail": f"Only {ratio*100:.0f}% of your income spent"})
     if len(pie) >= 2 and pie[0]["total"] > pie[1]["total"] * 2:
-        insights.append({"icon": "lightbulb", "title": f"Reduce {pie[0]['category']} expenses to save more", "detail": "This category dominates your spending"})
+        save_amt = (pie[0]["total"] - pie[1]["total"]) * 0.3
+        insights.append({"icon": "lightbulb", "title": f"You can save ~₹{save_amt:.0f} by reducing {pie[0]['category']}", "detail": "This category dominates your spending"})
+    if budget_amount > 0:
+        used_pct = (budget_spent / budget_amount) * 100
+        if used_pct >= 100:
+            insights.append({"icon": "alert-triangle", "title": "You exceeded your monthly budget", "detail": f"₹{budget_spent - budget_amount:.0f} over"})
+        elif used_pct >= 80:
+            insights.append({"icon": "alert-triangle", "title": "Close to your budget limit", "detail": f"{used_pct:.0f}% used"})
     if not insights:
         insights.append({"icon": "info", "title": "Start tracking to see insights", "detail": "Add a few transactions to get personalized tips"})
 
     return {
         "month": m,
+        "period": period,
         "totals": {
             "income": total_income,
             "expense": total_expense,
@@ -428,6 +592,8 @@ async def analytics_summary(user=Depends(get_current_user), month: Optional[str]
             "income": month_income,
             "expense": month_expense,
         },
+        "top_category": {"name": top_category, "amount": top_category_amount} if top_category else None,
+        "budget": {"amount": budget_amount, "spent": budget_spent, "remaining": budget_remaining},
         "pie": pie,
         "bar": days,
         "insights": insights,

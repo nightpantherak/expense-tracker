@@ -74,6 +74,11 @@ export default function Login() {
             </TouchableOpacity>
           </Link>
         </View>
+        <Link href="/(auth)/forgot-password" asChild>
+          <TouchableOpacity testID="forgot-password-link" style={{ alignItems: 'center', marginTop: 14 }}>
+            <Text style={[styles.link, { fontSize: 13 }]}>Forgot password?</Text>
+          </TouchableOpacity>
+        </Link>
       </ScrollView>
     </KeyboardAvoidingView>
   );
