@@ -34,7 +34,7 @@ export default function Login() {
           <Text style={styles.logoN}>N</Text>
         </View>
         <Text style={styles.title}>Welcome back</Text>
-        <Text style={styles.sub}>Sign in to NSIAP Expense Tracker</Text>
+        <Text style={styles.sub}>Sign in to Expense Tracker</Text>
 
         <GlassCard style={styles.card}>
           <Text style={styles.label}>Email</Text>
