@@ -78,7 +78,7 @@ export default function Budget() {
 
         <GlassCard style={{ marginTop: 14 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={styles.label}>Spent this month</Text>
+          <Text style={styles.label}>Spent this {period}</Text>
             <Text style={styles.amountLg}>{fmtMoney(b?.spent || 0)}</Text>
           </View>
           <View style={{ marginTop: 14 }}>

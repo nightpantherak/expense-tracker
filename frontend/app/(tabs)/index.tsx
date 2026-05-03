@@ -44,6 +44,34 @@ export default function Dashboard() {
   const top = data?.top_category;
   const budget = data?.budget;
 
+  // Budget warnings (monthly + weekly)
+  const mBud = budgets?.month;
+  const wBud = budgets?.week;
+  const mOver = mBud && mBud.amount > 0 && mBud.spent > mBud.amount;
+  const mNear = mBud && mBud.amount > 0 && !mOver && mBud.percent >= 80;
+  const wOver = wBud && wBud.amount > 0 && wBud.spent > wBud.amount;
+  const wNear = wBud && wBud.amount > 0 && !wOver && wBud.percent >= 80;
+  const anyOver = mOver || wOver;
+  const anyNear = mNear || wNear;
+  const disciplineOn = !!settings?.discipline_mode;
+
+  let warning = null;
+  if (anyOver) {
+    const which = mOver ? 'monthly' : 'weekly';
+    warning = {
+      tone: 'danger',
+      title: disciplineOn ? 'Budget exceeded. Streak lost.' : `You exceeded your ${which} budget`,
+      detail: disciplineOn ? 'Tomorrow is a fresh start.' : `Over by ${fmtMoney((mOver ? mBud.spent - mBud.amount : wBud.spent - wBud.amount))}`,
+    };
+  } else if (anyNear) {
+    const which = mNear ? 'monthly' : 'weekly';
+    warning = {
+      tone: 'warning',
+      title: 'You are close to your budget limit',
+      detail: `${(mNear ? mBud.percent : wBud.percent).toFixed(0)}% of ${which} budget used`,
+    };
+  }
+
   const openGoal = () => { setGoalInput(savings?.goal ? String(savings.goal) : ''); setGoalModal(true); };
   const saveGoal = async () => {
     const v = parseFloat(goalInput);
