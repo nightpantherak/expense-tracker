@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 7 validated. Backend /api/analytics/summary emits the new weekly insights — 'You spent ₹X on <category> this week' with % higher/lower than last week phrasing, and an aggregate 'Weekly spending up/down X%' when |diff| >= 15%. Dashboard uses Promise.allSettled with per-endpoint fallbacks. ErrorBoundary class wired at root with testID='error-boundary' & 'error-retry'. Found and fixed a critical missing import that was crashing the entire app before it could even reach login. 9/9 iter7 tests pass; 43/43 prior iter2-4 regression tests still pass; login → dashboard flow works end-to-end and insights render on Dashboard 'Smart tips' card.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {
+        "component": "app/_layout.tsx",
+        "issue": "(FIXED by testing agent) _layout.tsx referenced <ErrorBoundary> JSX but never imported it. App crashed on first render with 'ReferenceError: ErrorBoundary is not defined' — onboarding/login/dashboard were all unreachable. Added `import ErrorBoundary from '../src/ErrorBoundary';` on line 8."
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter7_insights.py",
+    "/app/test_reports/pytest/iter7_results.xml"
+  ],
+  "action_items": [
+    "Main agent: please self-review the _layout.tsx import fix applied by the tester (single-line import). Consider adding a lint rule (no-undef) to prevent similar runtime regressions.",
+    "Optional: the week-over-week detail always says 'No spend in this category last week' when last_week=0 — consider suppressing the second insight in that case to avoid redundancy with the existing 'You spent most on X' insight for brand-new users."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 847 lines — approaching the 700-line split threshold; consider splitting routers (auth / transactions / analytics / budgets) into separate modules.",
+    "/api/analytics/summary computes week-over-week even when the caller passes period=today/month — correct per spec (insights are independent of pie window), but worth documenting.",
+    "Week-over-week filter uses $lt: now+1s which can miss expenses with a future-timestamp entered earlier in the day; not a bug but a subtle edge case (discovered during test debugging)."
+  ],
+  "updated_files": [
+    "/app/frontend/app/_layout.tsx (added missing `import ErrorBoundary from '../src/ErrorBoundary'`)",
+    "/app/backend/tests/test_iter7_insights.py (new pytest file with 9 tests covering analytics insights + regression)"
+  ],
+  "success_rate": { "backend": "100% (9/9 iter7 + 43/43 regression)", "frontend": "100% (onboarding, login, dashboard, insights, streaks, budgets, transactions CRUD, period tabs all functional)" },
+  "seed_data_creation": "Test user 'iter7_<ts>@nsiap.com' created by fixtures with 1 expense this week (₹500 Food) + 1 last week (₹200 Food); 'test@nsiap.com / test1234' reused for UI smoke (1 expense ₹200 Food this week). No production data mutated.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend iter7 insights logic in /app/backend/server.py lines 722-790 is stable. New insights are appended after the existing 'You spent most on X' one, so UI 'Smart tips' card lists both. ErrorBoundary import regression is now fixed — watch for future layout-level JSX refs missing imports. Frontend testIDs: login-email-input, login-password-input, login-submit-button, dashboard-screen, period-today/week/month, warning-danger/warning, streak-log, streak-budget, dashboard-top-cat, error-boundary, error-retry.",
+  "rca_of_issue": "RCA (ErrorBoundary crash): _layout.tsx was edited in iter7 to wrap the tree with <ErrorBoundary> but the corresponding `import ErrorBoundary from '../src/ErrorBoundary'` statement was omitted. Because Expo Router bundles _layout as the root, this threw ReferenceError during initial render and the entire app shell failed to mount (white/error screen on every route). Reproduction: open preview URL — you get an 'Uncaught Error: ErrorBoundary is not defined' red log. Mitigation applied: added the default import on line 8 of /app/frontend/app/_layout.tsx and restarted expo via supervisor. Verified: onboarding, login, and dashboard now render; 0 console errors post-fix."
+}

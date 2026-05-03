@@ -724,6 +724,52 @@ async def analytics_summary(user=Depends(get_current_user), month: Optional[str]
     if pie:
         top = pie[0]
         insights.append({"icon": "trending-up", "title": f"You spent most on {top['category']}", "detail": f"₹{top['total']:.0f} in this period"})
+
+    # Week-over-week comparison (behavior tracking)
+    this_week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    last_week_start = this_week_start - timedelta(days=7)
+    last_week_end = this_week_start
+
+    async def _cat_totals(s, e):
+        cur = db.transactions.aggregate([
+            {"$match": {"user_id": user["id"], "type": "expense", "date": {"$gte": s, "$lt": e}}},
+            {"$group": {"_id": "$category", "total": {"$sum": "$amount"}}},
+        ])
+        out = {}
+        async for row in cur:
+            out[row["_id"]] = row["total"]
+        return out
+
+    this_week_cats = await _cat_totals(this_week_start, now + timedelta(seconds=1))
+    last_week_cats = await _cat_totals(last_week_start, last_week_end)
+    if this_week_cats:
+        top_cat = max(this_week_cats.items(), key=lambda kv: kv[1])
+        tw = top_cat[1]
+        lw = last_week_cats.get(top_cat[0], 0.0)
+        insights.append({
+            "icon": "chart",
+            "title": f"You spent ₹{tw:.0f} on {top_cat[0]} this week",
+            "detail": (
+                f"{int(((tw - lw) / lw) * 100)}% higher than last week"
+                if lw > 0 and tw > lw
+                else f"{int(((lw - tw) / lw) * 100)}% lower than last week"
+                if lw > 0 and tw < lw
+                else "No spend in this category last week"
+                if lw == 0
+                else "Same as last week"
+            ),
+        })
+
+    total_this_week = sum(this_week_cats.values())
+    total_last_week = sum(last_week_cats.values())
+    if total_last_week > 0 and total_this_week > 0:
+        diff_pct = ((total_this_week - total_last_week) / total_last_week) * 100
+        if abs(diff_pct) >= 15:
+            if diff_pct > 0:
+                insights.append({"icon": "alert-triangle", "title": f"Weekly spending up {diff_pct:.0f}%", "detail": f"₹{total_this_week:.0f} this week vs ₹{total_last_week:.0f} last week"})
+            else:
+                insights.append({"icon": "smile", "title": f"Weekly spending down {abs(diff_pct):.0f}%", "detail": f"You saved ₹{total_last_week - total_this_week:.0f} vs last week"})
+
     if month_expense > 0 and month_income > 0:
         ratio = month_expense / month_income
         if ratio > 0.8:

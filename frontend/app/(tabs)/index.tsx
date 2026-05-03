@@ -29,17 +29,23 @@ export default function Dashboard() {
   const [savingGoal, setSavingGoal] = useState(false);
 
   const load = useCallback(async () => {
-    try {
-      const [summary, t, sav, bs, st, settingsRes] = await Promise.all([
-        api.analytics({ period }),
-        api.listTransactions({ limit: 5 }),
-        api.getSavings(),
-        api.getBudgets(),
-        api.getStreaks(),
-        api.getSettings(),
-      ]);
-      setData(summary); setTxns(t); setSavings(sav); setBudgets(bs); setStreaks(st); setSettings(settingsRes);
-    } catch {} finally { setLoading(false); }
+    // Per-endpoint failure isolation: one failing call doesn't blank the dashboard.
+    const results = await Promise.allSettled([
+      api.analytics({ period }),
+      api.listTransactions({ limit: 5 }),
+      api.getSavings(),
+      api.getBudgets(),
+      api.getStreaks(),
+      api.getSettings(),
+    ]);
+    const get = (i, fallback) => results[i].status === 'fulfilled' ? results[i].value : fallback;
+    setData(get(0, null));
+    setTxns(get(1, []));
+    setSavings(get(2, null));
+    setBudgets(get(3, null));
+    setStreaks(get(4, null));
+    setSettings(get(5, { discipline_mode: false }));
+    setLoading(false);
   }, [period]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
