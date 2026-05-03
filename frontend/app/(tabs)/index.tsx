@@ -19,6 +19,9 @@ export default function Dashboard() {
   const [data, setData] = useState(null);
   const [savings, setSavings] = useState(null);
   const [txns, setTxns] = useState([]);
+  const [budgets, setBudgets] = useState(null);
+  const [streaks, setStreaks] = useState(null);
+  const [settings, setSettings] = useState({ discipline_mode: false });
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month'); // today/week/month
   const [goalModal, setGoalModal] = useState(false);
@@ -27,12 +30,15 @@ export default function Dashboard() {
 
   const load = useCallback(async () => {
     try {
-      const [summary, t, sav] = await Promise.all([
+      const [summary, t, sav, bs, st, settingsRes] = await Promise.all([
         api.analytics({ period }),
         api.listTransactions({ limit: 5 }),
         api.getSavings(),
+        api.getBudgets(),
+        api.getStreaks(),
+        api.getSettings(),
       ]);
-      setData(summary); setTxns(t); setSavings(sav);
+      setData(summary); setTxns(t); setSavings(sav); setBudgets(bs); setStreaks(st); setSettings(settingsRes);
     } catch {} finally { setLoading(false); }
   }, [period]);
 

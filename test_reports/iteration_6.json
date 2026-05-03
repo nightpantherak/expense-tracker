@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 6 retest — Dashboard fix is COMPLETE and ALL 5 frontend features verified green. The missing useState hooks (budgets/streaks/settings) and the extended Promise.all in load() are correctly wired in /app/frontend/app/(tabs)/index.tsx. Login → Dashboard mounts with no red-screen and no ReferenceError. Streak mini-cards render with new testIDs streak-log and streak-budget. End-to-end budget warning flow works: setting weekly budget ₹100 + adding ₹200 Food expense produces the warning-danger banner with title 'You exceeded your weekly budget'; toggling Profile discipline-toggle ON and returning to Dashboard switches the title to 'Budget exceeded. Streak lost.' with a reddish heroDanger border on the Total Balance card. Budget screen Month/Week tabs correctly switch the label between 'Spent this month' and 'Spent this week'. Backend not re-tested (iter4 was 17/17, scope is frontend-only).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_5.json",
+    "/app/test_reports/iteration_4.json",
+    "/app/backend/tests/test_iter4_features.py"
+  ],
+  "action_items": [
+    "None — iteration 6 scope is fully complete. Optional polish if E1 wants to harden the dashboard: wrap individual API calls in try/catch (currently a single failing endpoint inside Promise.all silently blanks the dashboard) and add a top-level error boundary."
+  ],
+  "critical_code_review_comments": [
+    "index.tsx now correctly declares budgets/streaks/settings useState (lines 22-24) and fetches them via Promise.all in load() (lines 33-40). No undefined identifiers remain.",
+    "Promise.all in load() will fail-all if any single endpoint errors; consider settling individually so one bad endpoint doesn't blank the dashboard.",
+    "streak-budget initial value displayed as 90 for a brand-new test user is suspicious (likely backend default seeded as days-in-period). Out of scope for this iteration but worth verifying business rule.",
+    "Profile Switch in React Native renders without aria-checked on web — consider using accessibilityState testing helpers for future tests.",
+    "Recommend a top-level error boundary so a future bad render in Dashboard won't black-hole the whole authenticated app (this would have caught iter4/5 crashes earlier)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not re-run (iter4 was 100%)", "frontend": "100% (5/5 features verified)"},
+  "seed_data_creation": "Re-used existing test@nsiap.com user. Created 1 expense (₹200 Food) and 1 weekly budget (₹100) on this user via the UI as part of the warning-banner flow. Discipline_mode left ON at the end.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter6 fully green. test@nsiap.com / test1234 currently has discipline_mode=ON, weekly budget ₹100, and a ₹200 Food expense for this week, so logging in and visiting Dashboard will continue to render the 'Budget exceeded. Streak lost.' danger banner and the heroDanger border. To reset, login → Profile → toggle discipline-toggle OFF, and/or Budget tab → Week → set 0.",
+  "rca_of_issue": "RCA — In iter5 the compute block referenced budgets/streaks/settings that were never declared, causing ReferenceError on every Dashboard mount. E1 fixed this in iter6 by (a) adding three useState hooks (budgets=null, streaks=null, settings={discipline_mode:false}) and (b) extending the existing Promise.all in load() with api.getBudgets(), api.getStreaks(), api.getSettings() and persisting them via setBudgets/setStreaks/setSettings. Verified via Playwright: Dashboard now mounts cleanly with zero pageerrors, all four feature flows work, and the heroDanger styling activates when discipline_mode=true and any budget is exceeded."
+}
