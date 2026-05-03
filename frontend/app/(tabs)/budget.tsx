@@ -14,17 +14,18 @@ export default function Budget() {
   const [b, setB] = useState(null);
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
+  const [period, setPeriod] = useState('month');
 
   const load = useCallback(async () => {
-    try { const d = await api.getBudget(); setB(d); setAmount(d.amount ? String(d.amount) : ''); } catch {}
-  }, []);
+    try { const d = await api.getBudget(period); setB(d); setAmount(d.amount ? String(d.amount) : ''); } catch {}
+  }, [period]);
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const save = async () => {
     const val = parseFloat(amount);
     if (isNaN(val) || val < 0) return;
     setBusy(true);
-    try { const d = await api.setBudget({ amount: val }); setB(d); } catch {}
+    try { const d = await api.setBudget({ amount: val, period }); setB(d); } catch {}
     finally { setBusy(false); }
   };
 
@@ -45,10 +46,18 @@ export default function Budget() {
       <LinearGradient colors={['#07070A', '#0C0C14', '#050508']} style={StyleSheet.absoluteFill} />
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 16, paddingBottom: 140, paddingHorizontal: 20 }}>
         <Text style={styles.h1}>Budget</Text>
-        <Text style={styles.sub}>{new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' })}</Text>
+        <Text style={styles.sub}>{period === 'month' ? new Date().toLocaleString('en-IN', { month: 'long', year: 'numeric' }) : 'This week'}</Text>
+
+        <View style={styles.seg}>
+          {['month', 'week'].map(p => (
+            <TouchableOpacity key={p} testID={`budget-period-${p}`} onPress={() => setPeriod(p)} style={[styles.segItem, period === p && styles.segItemActive]}>
+              <Text style={[styles.segText, period === p && { color: '#fff' }]}>{p === 'month' ? 'Monthly' : 'Weekly'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         <GlassCard style={{ marginTop: 16 }}>
-          <Text style={styles.label}>Monthly budget</Text>
+          <Text style={styles.label}>{period === 'month' ? 'Monthly' : 'Weekly'} budget</Text>
           <View style={styles.inputRow}>
             <Text style={styles.currency}>₹</Text>
             <TextInput
@@ -97,6 +106,10 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.bg },
   h1: { color: '#fff', fontSize: 30, fontWeight: '800', letterSpacing: -0.5 },
   sub: { color: theme.textSecondary, marginTop: 2 },
+  seg: { flexDirection: 'row', padding: 4, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', marginTop: 14 },
+  segItem: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 10 },
+  segItemActive: { backgroundColor: theme.primary },
+  segText: { color: theme.textSecondary, fontWeight: '700', fontSize: 13 },
   label: { color: theme.textSecondary, fontSize: 12, fontWeight: '700', letterSpacing: 1, textTransform: 'uppercase' },
   inputRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 10 },
   currency: { color: theme.textSecondary, fontSize: 22, fontWeight: '700' },

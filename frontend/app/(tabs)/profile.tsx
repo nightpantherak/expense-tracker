@@ -1,17 +1,29 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import GlassCard from '../../src/GlassCard';
 import Icon from '../../src/Icon';
 import { theme } from '../../src/theme';
 import { useAuth } from '../../src/auth';
+import { api } from '../../src/api';
 
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
   const router = useRouter();
+  const [discipline, setDiscipline] = useState(false);
+
+  const load = useCallback(async () => {
+    try { const s = await api.getSettings(); setDiscipline(!!s.discipline_mode); } catch {}
+  }, []);
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  const toggleDiscipline = async (v) => {
+    setDiscipline(v);
+    try { await api.updateSettings({ discipline_mode: v }); } catch { setDiscipline(!v); }
+  };
 
   const onLogout = async () => {
     await logout();
@@ -30,6 +42,24 @@ export default function Profile() {
           </View>
           <Text style={styles.name}>{user?.name || 'User'}</Text>
           <Text style={styles.email}>{user?.email}</Text>
+        </GlassCard>
+
+        <GlassCard style={{ marginTop: 14 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>Discipline mode</Text>
+              <Text style={{ color: theme.textSecondary, fontSize: 12, marginTop: 4, lineHeight: 17 }}>
+                Stronger visual feedback when you exceed your budget. Kind, never harsh.
+              </Text>
+            </View>
+            <Switch
+              testID="discipline-toggle"
+              value={discipline}
+              onValueChange={toggleDiscipline}
+              trackColor={{ false: 'rgba(255,255,255,0.1)', true: theme.primary }}
+              thumbColor="#fff"
+            />
+          </View>
         </GlassCard>
 
         <GlassCard style={{ marginTop: 14, padding: 0 }}>

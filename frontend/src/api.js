@@ -43,8 +43,16 @@ export const api = {
   createCategory: (body) => request('/categories', { method: 'POST', body }),
   deleteCategory: (id) => request(`/categories/${id}`, { method: 'DELETE' }),
 
-  getBudget: (month) => request(`/budget${month ? `?month=${month}` : ''}`),
+  getBudget: (period = 'month', extra = {}) => {
+    const q = new URLSearchParams({ period, ...extra }).toString();
+    return request(`/budget?${q}`);
+  },
+  getBudgets: () => request('/budgets'),
   setBudget: (body) => request('/budget', { method: 'POST', body }),
+
+  getStreaks: () => request('/streaks'),
+  getSettings: () => request('/settings'),
+  updateSettings: (body) => request('/settings', { method: 'PATCH', body }),
 
   getSavings: (month) => request(`/savings${month ? `?month=${month}` : ''}`),
   setSavings: (body) => request('/savings', { method: 'POST', body }),

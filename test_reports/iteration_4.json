@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 4 tested. Backend: 17/17 pytest passes (budgets weekly+monthly, streaks, settings, regression). Frontend: CRITICAL — Dashboard crashes post-login with ReferenceError: 'disciplineOn is not defined'. The component references 4 undeclared variables: disciplineOn, anyOver, warning, and streaks. None of the new Iteration 4 frontend UI (streak mini cards, warning banner, discipline-mode-aware dashboard) is testable until this is fixed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "app/(tabs)/index.tsx (Dashboard)", "issue": "Uncaught ReferenceError: 'disciplineOn is not defined' at Dashboard (line 84). Also references undeclared 'anyOver' (line 84), 'warning' (line 101-106), 'streaks' (lines 117, 125-126). Dashboard fails to render immediately after login — users see a red-screen error overlay.", "testID": "dashboard-screen", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [
+      {"flow": "Dashboard streak + warning integration", "issue": "Cannot verify streak-log / streak-budget / warning-danger / warning-warning testIDs because Dashboard never mounts. Need to: (1) add useState for streaks + settings, (2) useEffect/useFocusEffect to call api.getStreaks() and api.getSettings(), (3) compute disciplineOn from settings, (4) compute anyOver from budgets (needs api.getBudgets() for weekly vs monthly), (5) compute warning object with {tone, title, detail} based on percent thresholds (>=80% amber, >=100% danger; when discipline_mode && overBudget title = 'Budget exceeded. Streak lost.').", "affected_testIDs": ["streak-log", "streak-budget", "warning-danger", "warning-warning"]}
+    ],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Dashboard", "issue": "Missing state/effect hooks for streaks, settings and weekly-vs-monthly budget. JSX references symbols that were never declared — compile passes because these are runtime references, but the very first render throws."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter4_features.py",
+    "/app/test_reports/pytest/iter4_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix /app/frontend/app/(tabs)/index.tsx Dashboard to declare missing variables: add useState for streaks (initial null) and discipline (initial false); fetch via api.getStreaks(), api.getSettings(), api.getBudgets() inside load(); compute anyOver, disciplineOn and warning before returning JSX. Re-run UI tests afterwards.",
+    "Confirm Budget screen weekly spent is shown correctly — the label currently says 'Spent this month' hard-coded on line 81 of budget.tsx even when period='week'. Minor UX.",
+    "Once Dashboard renders, verify: (a) streak-log & streak-budget testIDs show values, (b) when setting a small weekly budget and logging an overage, warning-danger banner appears, (c) toggling discipline-toggle in Profile then going over budget shows banner title 'Budget exceeded. Streak lost.'"
+  ],
+  "critical_code_review_comments": [
+    "Dashboard (index.tsx) references undeclared variables disciplineOn, anyOver, warning, streaks — RUNTIME CRASH. Entire authenticated app is unusable.",
+    "budget.tsx line 81: label 'Spent this month' is not period-aware (should switch to 'this week' when period=week).",
+    "server.py analytics_summary (line 681) still queries budgets with only {user_id, month} — legacy shape. Now safe since all month docs have period='month' but consider adding explicit filter {period: {'$ne':'week'}} for consistency.",
+    "server.py get_current_user logs no exc — not an issue. No file >700 lines."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter4_features.py (new)"
+  ],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "0% — Dashboard crashes on mount"},
+  "seed_data_creation": "Multiple ephemeral users created via /api/auth/register with prefix iter4_* and iter4_break_*/iter4_nobud_*/iter4_cp_* for isolation. No manual cleanup — users are disposable.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend iter4 endpoints (GET /api/budgets, GET/POST /api/budget with period, GET /api/streaks, GET/PATCH /api/settings) all work. The blocker is purely the Dashboard component missing state/compute for streaks+settings+budgets. After E1 fixes it, re-test: login as test@nsiap.com / test1234 → land on /(tabs) → verify streak-log & streak-budget cards → go to Budget tab → set weekly budget=100 and add a 500 Food expense → return to dashboard → expect warning-danger banner. Then toggle Profile discipline-toggle ON and verify banner title becomes 'Budget exceeded. Streak lost.'",
+  "rca_of_issue": "RCA: Dashboard JSX was authored assuming helper hooks (useStreaks, useSettings) or local variables would exist, but the corresponding const declarations were never added to the component body. The TS compiler does NOT catch this in React Native/Expo web because these identifiers are evaluated only at render — resulting in the red-screen ReferenceError seen in the screenshot. Reproduction: open app → skip onboarding → login with any valid account → red screen 'disciplineOn is not defined'. Mitigation: declare these state variables and compute them from API responses before the return statement."
+}

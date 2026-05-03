@@ -108,6 +108,11 @@ class CategoryCreate(BaseModel):
 class BudgetSet(BaseModel):
     amount: float
     month: Optional[str] = None  # YYYY-MM
+    period: Optional[str] = "month"  # "month" | "week"
+    week: Optional[str] = None  # YYYY-Www (ISO week)
+
+class SettingsUpdate(BaseModel):
+    discipline_mode: Optional[bool] = None
 
 class SavingsSet(BaseModel):
     amount: float
@@ -441,18 +446,42 @@ def current_month() -> str:
     return f"{now.year:04d}-{now.month:02d}"
 
 
-@api_router.get("/budget")
-async def get_budget(user=Depends(get_current_user), month: Optional[str] = None):
-    m = month or current_month()
-    b = await db.budgets.find_one({"user_id": user["id"], "month": m})
-    amount = b["amount"] if b else 0.0
-    # compute spent this month
-    year, mo = m.split("-")
-    start = datetime(int(year), int(mo), 1, tzinfo=timezone.utc)
+def current_week() -> str:
+    now = datetime.now(timezone.utc)
+    y, w, _ = now.isocalendar()
+    return f"{y:04d}-W{w:02d}"
+
+
+def week_bounds(week_str: str):
+    y, w = week_str.split("-W")
+    monday = datetime.fromisocalendar(int(y), int(w), 1).replace(tzinfo=timezone.utc)
+    return monday, monday + timedelta(days=7)
+
+
+def month_bounds(month_str: str):
+    y, mo = month_str.split("-")
+    start = datetime(int(y), int(mo), 1, tzinfo=timezone.utc)
     if int(mo) == 12:
-        end = datetime(int(year) + 1, 1, 1, tzinfo=timezone.utc)
+        end = datetime(int(y) + 1, 1, 1, tzinfo=timezone.utc)
     else:
-        end = datetime(int(year), int(mo) + 1, 1, tzinfo=timezone.utc)
+        end = datetime(int(y), int(mo) + 1, 1, tzinfo=timezone.utc)
+    return start, end
+
+
+@api_router.get("/budget")
+async def get_budget(user=Depends(get_current_user), month: Optional[str] = None, period: Optional[str] = "month", week: Optional[str] = None):
+    if period == "week":
+        w = week or current_week()
+        b = await db.budgets.find_one({"user_id": user["id"], "period": "week", "week": w})
+        amount = b["amount"] if b else 0.0
+        start, end = week_bounds(w)
+        key = {"week": w, "period": "week"}
+    else:
+        m = month or current_month()
+        b = await db.budgets.find_one({"user_id": user["id"], "period": {"$ne": "week"}, "month": m})
+        amount = b["amount"] if b else 0.0
+        start, end = month_bounds(m)
+        key = {"month": m, "period": "month"}
     agg = db.transactions.aggregate([
         {"$match": {"user_id": user["id"], "type": "expense", "date": {"$gte": start, "$lt": end}}},
         {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
@@ -461,18 +490,139 @@ async def get_budget(user=Depends(get_current_user), month: Optional[str] = None
     async for row in agg:
         total = row["total"]
     percent = (total / amount * 100) if amount > 0 else 0
-    return {"month": m, "amount": amount, "spent": total, "percent": percent}
+    return {**key, "amount": amount, "spent": total, "percent": percent}
 
 
 @api_router.post("/budget")
 async def set_budget(payload: BudgetSet, user=Depends(get_current_user)):
+    period = payload.period or "month"
+    if period == "week":
+        w = payload.week or current_week()
+        await db.budgets.update_one(
+            {"user_id": user["id"], "period": "week", "week": w},
+            {"$set": {"amount": float(payload.amount), "period": "week", "week": w, "updated_at": datetime.now(timezone.utc)}},
+            upsert=True,
+        )
+        return await get_budget(user=user, period="week", week=w)
     m = payload.month or current_month()
     await db.budgets.update_one(
-        {"user_id": user["id"], "month": m},
-        {"$set": {"amount": float(payload.amount), "updated_at": datetime.now(timezone.utc)}},
+        {"user_id": user["id"], "period": {"$ne": "week"}, "month": m},
+        {"$set": {"amount": float(payload.amount), "period": "month", "month": m, "updated_at": datetime.now(timezone.utc)}},
         upsert=True,
     )
-    return await get_budget(user=user, month=m)
+    return await get_budget(user=user, period="month", month=m)
+
+
+@api_router.get("/budgets")
+async def get_all_budgets(user=Depends(get_current_user)):
+    month = await get_budget(user=user, period="month")
+    week = await get_budget(user=user, period="week")
+    return {"month": month, "week": week}
+
+
+@api_router.get("/streaks")
+async def get_streaks(user=Depends(get_current_user)):
+    """Compute logging + budget streaks on-demand from transaction history."""
+    now = datetime.now(timezone.utc)
+    today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    # Fetch last 90 days of transactions
+    lookback_start = today - timedelta(days=90)
+    txns = await db.transactions.find({
+        "user_id": user["id"],
+        "date": {"$gte": lookback_start},
+    }).to_list(5000)
+
+    # Group expense totals by day-string YYYY-MM-DD
+    by_day = {}
+    expense_by_day = {}
+    for t in txns:
+        d = t["date"]
+        if isinstance(d, datetime):
+            if d.tzinfo is None:
+                d = d.replace(tzinfo=timezone.utc)
+            key = d.strftime("%Y-%m-%d")
+            by_day.setdefault(key, 0)
+            by_day[key] += 1
+            if t.get("type") == "expense":
+                expense_by_day.setdefault(key, 0.0)
+                expense_by_day[key] += t.get("amount", 0.0)
+
+    # Logging streak: consecutive days backwards with at least one txn.
+    # If today has none, start counting from yesterday (grace).
+    log_streak = 0
+    cursor = today
+    if by_day.get(cursor.strftime("%Y-%m-%d"), 0) == 0:
+        cursor = cursor - timedelta(days=1)
+    while by_day.get(cursor.strftime("%Y-%m-%d"), 0) > 0:
+        log_streak += 1
+        cursor = cursor - timedelta(days=1)
+
+    # Budget streak: walk back day by day. A day is "good" if:
+    #   - the ISO week containing it (up to & including it) <= week_budget (if week budget set)
+    #   - AND the calendar month containing it (up to & including it) <= month_budget (if month budget set)
+    # If neither budget is set, budget streak cannot be computed meaningfully.
+    week_doc = await db.budgets.find_one({"user_id": user["id"], "period": "week", "week": current_week()})
+    month_doc = await db.budgets.find_one({"user_id": user["id"], "period": {"$ne": "week"}, "month": current_month()})
+    week_budget = week_doc["amount"] if week_doc else 0.0
+    month_budget = month_doc["amount"] if month_doc else 0.0
+
+    budget_streak = 0
+    budget_streak_possible = week_budget > 0 or month_budget > 0
+    if budget_streak_possible:
+        cur = today
+        for _ in range(90):
+            day_start = cur
+            day_end = cur + timedelta(days=1)
+            # Week-to-date total (within ISO week containing this day, inclusive through day_end)
+            iso_year, iso_week, _ = cur.isocalendar()
+            week_start = datetime.fromisocalendar(iso_year, iso_week, 1).replace(tzinfo=timezone.utc)
+            # Month-to-date total
+            m_start = cur.replace(day=1)
+            # Sum from period start through end of this day
+            def _sum_in_range(items, s, e):
+                total = 0.0
+                for ts, amt in items:
+                    if s <= ts < e:
+                        total += amt
+                return total
+            items = [(datetime.strptime(k, "%Y-%m-%d").replace(tzinfo=timezone.utc), v) for k, v in expense_by_day.items()]
+            week_sum = _sum_in_range(items, week_start, day_end)
+            month_sum = _sum_in_range(items, m_start, day_end)
+
+            ok = True
+            if week_budget > 0 and week_sum > week_budget:
+                ok = False
+            if month_budget > 0 and month_sum > month_budget:
+                ok = False
+            if not ok:
+                break
+            budget_streak += 1
+            cur = cur - timedelta(days=1)
+
+    return {
+        "log_streak": log_streak,
+        "budget_streak": budget_streak,
+        "budget_streak_possible": budget_streak_possible,
+        "week_budget": week_budget,
+        "month_budget": month_budget,
+    }
+
+
+@api_router.get("/settings")
+async def get_settings(user=Depends(get_current_user)):
+    doc = await db.users.find_one({"_id": ObjectId(user["id"])})
+    return {"discipline_mode": bool(doc.get("discipline_mode", False))}
+
+
+@api_router.patch("/settings")
+async def update_settings(payload: SettingsUpdate, user=Depends(get_current_user)):
+    update = {}
+    if payload.discipline_mode is not None:
+        update["discipline_mode"] = bool(payload.discipline_mode)
+    if update:
+        await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": update})
+    return await get_settings(user=user)
 
 
 # ---------------- Analytics ----------------
@@ -606,7 +756,17 @@ async def startup():
     await db.users.create_index("email", unique=True)
     await db.transactions.create_index([("user_id", 1), ("date", -1)])
     await db.categories.create_index([("user_id", 1), ("name", 1)])
-    await db.budgets.create_index([("user_id", 1), ("month", 1)], unique=True)
+    # Budgets: non-unique composite (period-aware). Drop legacy unique index if present.
+    try:
+        existing = await db.budgets.index_information()
+        for name, info in existing.items():
+            keys = info.get("key", [])
+            if keys == [("user_id", 1), ("month", 1)] and info.get("unique"):
+                await db.budgets.drop_index(name)
+    except Exception:
+        pass
+    await db.budgets.create_index([("user_id", 1), ("period", 1), ("month", 1)])
+    await db.budgets.create_index([("user_id", 1), ("period", 1), ("week", 1)])
 
 
 @app.on_event("shutdown")

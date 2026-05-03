@@ -81,7 +81,7 @@ export default function Dashboard() {
           ))}
         </View>
 
-        <GlassCard style={styles.hero}>
+        <GlassCard style={[styles.hero, disciplineOn && anyOver && styles.heroDanger]}>
           <Text style={styles.heroLabel}>Total Balance</Text>
           <Text testID="dashboard-balance" style={styles.balance}>{fmtMoney(balance)}</Text>
           <View style={styles.row}>
@@ -97,6 +97,35 @@ export default function Dashboard() {
             </View>
           </View>
         </GlassCard>
+
+        {warning ? (
+          <View testID={`warning-${warning.tone}`} style={[styles.warnBanner, warning.tone === 'danger' ? styles.warnDanger : styles.warnAmber]}>
+            <Icon name="alert-triangle" color={warning.tone === 'danger' ? theme.expense : theme.warning} size={18} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.warnTitle}>{warning.title}</Text>
+              <Text style={styles.warnDetail}>{warning.detail}</Text>
+            </View>
+          </View>
+        ) : null}
+
+        <View style={styles.miniRow}>
+          <GlassCard style={styles.miniCard}>
+            <View style={styles.miniHeader}>
+              <Text style={styles.flame}>🔥</Text>
+              <Text style={styles.miniLabel}>Logging streak</Text>
+            </View>
+            <Text style={styles.miniValue} testID="streak-log">{streaks?.log_streak ?? 0}</Text>
+            <Text style={styles.miniSub}>days in a row</Text>
+          </GlassCard>
+          <GlassCard style={styles.miniCard}>
+            <View style={styles.miniHeader}>
+              <Text style={styles.flame}>🎯</Text>
+              <Text style={styles.miniLabel}>Budget streak</Text>
+            </View>
+            <Text style={styles.miniValue} testID="streak-budget">{streaks?.budget_streak_possible ? (streaks?.budget_streak ?? 0) : '—'}</Text>
+            <Text style={styles.miniSub}>{streaks?.budget_streak_possible ? 'days within budget' : 'set a budget to start'}</Text>
+          </GlassCard>
+        </View>
 
         <View style={styles.miniRow}>
           <GlassCard style={styles.miniCard}>
@@ -260,6 +289,13 @@ const styles = StyleSheet.create({
   segItemActive: { backgroundColor: theme.primary },
   segText: { color: theme.textSecondary, fontWeight: '700', fontSize: 13 },
   hero: { marginBottom: 12, borderColor: 'rgba(34,211,238,0.18)' },
+  heroDanger: { borderColor: 'rgba(255,59,48,0.5)', backgroundColor: 'rgba(255,59,48,0.05)' },
+  warnBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, marginBottom: 12, borderWidth: 1 },
+  warnDanger: { backgroundColor: 'rgba(255,59,48,0.08)', borderColor: 'rgba(255,59,48,0.35)' },
+  warnAmber: { backgroundColor: 'rgba(255,149,0,0.08)', borderColor: 'rgba(255,149,0,0.35)' },
+  warnTitle: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  warnDetail: { color: theme.textSecondary, fontSize: 12, marginTop: 2 },
+  flame: { fontSize: 14 },
   heroLabel: { color: theme.textSecondary, fontSize: 12, letterSpacing: 1, textTransform: 'uppercase' },
   balance: { color: '#fff', fontSize: 42, fontWeight: '900', letterSpacing: -1, marginTop: 8 },
   row: { flexDirection: 'row', marginTop: 18, gap: 10 },
