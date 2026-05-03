@@ -57,10 +57,16 @@
 
 ## Smart Insights (rule-based)
 - "You spent most on X · ₹Y in this period"
+- **"You spent ₹X on [top-category] this week" — with % delta vs last week (NEW)**
+- **"Weekly spending up/down X%" — triggered at ≥15% change vs previous week (NEW)**
 - "You can save ~₹X by reducing Y"
 - "Close to your budget limit · N% used" / "You exceeded your monthly budget"
 - "High spend-to-income ratio" / "Great saving pace"
 - Savings: "On track", "Behind target — save ~₹X/day", "Goal achieved!"
+
+## Stability Layer (NEW)
+- **Per-endpoint failure isolation** on Dashboard via `Promise.allSettled` — one failing API keeps the rest of the screen functional
+- **Root `<ErrorBoundary />`** wrapping the app — renders a friendly "Something went wrong" screen with Retry instead of blanking the app
 
 ## Production Hardening (suggested)
 - Email delivery for reset (SendGrid / Resend)
