@@ -569,9 +569,21 @@ async def get_streaks(user=Depends(get_current_user)):
 
     budget_streak = 0
     budget_streak_possible = week_budget > 0 or month_budget > 0
-    if budget_streak_possible:
+    # Cap lookback at days since first recorded transaction so a brand-new
+    # account with no expenses doesn't show a misleading 90-day "streak".
+    first_txn = await db.transactions.find_one({"user_id": user["id"]}, sort=[("date", 1)])
+    if not first_txn:
+        budget_streak_possible = budget_streak_possible  # keep, but streak stays 0
+        max_days = 0
+    else:
+        ft = first_txn["date"]
+        if isinstance(ft, datetime) and ft.tzinfo is None:
+            ft = ft.replace(tzinfo=timezone.utc)
+        max_days = max(0, (today - ft.replace(hour=0, minute=0, second=0, microsecond=0)).days + 1)
+        max_days = min(max_days, 90)
+    if budget_streak_possible and max_days > 0:
         cur = today
-        for _ in range(90):
+        for _ in range(max_days):
             day_start = cur
             day_end = cur + timedelta(days=1)
             # Week-to-date total (within ISO week containing this day, inclusive through day_end)
